@@ -1,32 +1,151 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8"/>
-<title>家庭积分系统</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
-body{font-family:Arial;background:#f5f0ff;margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}
-.box{max-width:380px;width:90%;background:#fff;padding:22px 20px;border-radius:14px;box-shadow:0 8px 26px rgba(0,0,0,.08)}
-h2{margin:0 0 12px;color:#6b21a8}
-input{width:100%;padding:9px;margin:6px 0;border:1px solid #ccc;border-radius:8px;font-size:14px}
-button{width:100%;padding:10px;margin-top:8px;border:none;border-radius:8px;background:#7c3aed;color:#fff;font-size:15px;cursor:pointer}
-.tip{font-size:12px;color:#666;margin-top:6px}
-</style>
+    <meta charset="UTF-8">
+    <title>家庭积分系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f0ff; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
+        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #7c3aed; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button:hover { background: #6d28d9; }
+        .hidden { display: none; }
+        .member-card { background: #f3e8ff; padding: 15px; border-radius: 10px; margin: 10px 0; text-align: left; }
+        .score-btn { background: #10b981; margin: 5px; padding: 8px 15px; font-size: 14px; width: auto; display: inline-block; }
+        .minus-btn { background: #ef4444; }
+    </style>
 </head>
 <body>
-<div class="box" id="ui"></div>
+
+<div class="container" id="auth-container">
+    <h2>🏠 家庭积分系统</h2>
+    <div id="login-box">
+        <input type="email" id="email" placeholder="邮箱">
+        <input type="password" id="password" placeholder="密码">
+        <button onclick="login()">登录</button>
+        <button onclick="register()" style="background:#6366f1;">注册</button>
+        <p id="auth-message" style="color:red; font-size:14px;"></p>
+    </div>
+</div>
+
+<div class="container hidden" id="main-app">
+    <h2>👋 欢迎回家！</h2>
+    <div id="current-user"></div>
+    <button onclick="logout()" style="background:#999; margin-bottom:20px;">退出登录</button>
+
+    <h3>👨‍👩‍👧‍👦 家庭成员</h3>
+    <div id="members-list">加载中...</div>
+
+    <h3>➕ 添加新成员</h3>
+    <input type="text" id="new-member-name" placeholder="输入成员名字（如：爸爸）">
+    <button onclick="addMember()">添加成员</button>
+</div>
+
 <script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase-js.min.js"></script>
- 'https://qjzozechbtbohtcaulqz.supabase.co',
- 'sb_publishable_yezkkG8fOBDuf7oAssvPg_KYvAq_Vs'
-);
-(async()=>{const{u:{user}}=await sb.auth.getUser();!user?showLogin():showHome(user)})();
-function showLogin(){
- ui.innerHTML=`<h2>🔐 登录 / 注册</h2><input id="em" placeholder="邮箱"><input id="pw" type="password" placeholder="密码"><button onclick="doLogin()">登录</button><button onclick="doSignup()" style="background:#a78bfa">注册</button><div class="tip">用你自己的邮箱注册</div>`;
-}
-async function doLogin(){const r=await sb.auth.signInWithPassword({email:em.value,password:pw.value});if(r.error){alert(r.error.message);return}location.reload();}
-async function doSignup(){const r=await sb.auth.signUp({email:em.value,password:pw.value});if(r.error){alert(r.error.message);return}alert('注册成功，现在可以登录了');location.reload();}
-function showHome(u){ui.innerHTML=`<h2>🏠 家庭积分系统</h2><p>✅ 登录成功（${u.email}）</p><button onclick="sb.auth.signOut().then(()=>location.reload())">退出</button>`;}
+    const SUPABASE_URL = 'https://qjzoezehbtbohtcaulqz.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_yezkK68fOBDufF7oAssvpKg_KYvAq_Vs';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    checkUser();
+
+    async function checkUser() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            showApp(user);
+        } else {
+            showLogin();
+        }
+    }
+
+    function showLogin() {
+        document.getElementById('auth-container').classList.remove('hidden');
+        document.getElementById('main-app').classList.add('hidden');
+    }
+
+    async function showApp(user) {
+        document.getElementById('auth-container').classList.add('hidden');
+        document.getElementById('main-app').classList.remove('hidden');
+        document.getElementById('current-user').innerHTML = `当前用户：${user.email}<small>你可以开始管理家庭积分了</small>`;
+        loadMembers();
+    }
+
+    async function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            document.getElementById('auth-message').innerText = error.message;
+        } else {
+            checkUser();
+        }
+    }
+
+    async function register() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+            document.getElementById('auth-message').innerText = error.message;
+        } else {
+            alert('注册成功！请查收邮件验证，然后登录。');
+        }
+    }
+
+    async function logout() {
+        await supabase.auth.signOut();
+        checkUser();
+    }
+
+    async function loadMembers() {
+        const { data, error } = await supabase.from('family_members').select('*');
+        const listDiv = document.getElementById('members-list');
+        listDiv.innerHTML = '';
+
+        if (error) {
+            listDiv.innerHTML = '数据加载失败，请刷新重试。';
+            return;
+        }
+
+        if (data.length === 0) {
+            listDiv.innerHTML = '<p style="color:#999;">还没有成员，请添加一个吧！</p>';
+            return;
+        }
+
+        data.forEach(member => {
+            const card = document.createElement('div');
+            card.className = 'member-card';
+            card.innerHTML = `
+                <strong>${member.name}</strong> 
+                <span style="float:right;">分数: ${member.score}</span>
+                <button class="score-btn" onclick="changeScore('${member.id}', 1)">+1分</button>
+                <button class="score-btn minus-btn" onclick="changeScore('${member.id}', -1)">-1分</button>
+            `;
+            listDiv.appendChild(card);
+        });
+    }
+
+    async function addMember() {
+        const name = document.getElementById('new-member-name').value;
+        if (!name) return alert('请输入名字');
+
+        const { error } = await supabase.from('family_members').insert([{ name: name, score: 0 }]);
+        
+        if (error) {
+            alert('添加失败：' + error.message);
+        } else {
+            document.getElementById('new-member-name').value = '';
+            loadMembers();
+        }
+    }
+
+    async function changeScore(id, change) {
+        const { data } = await supabase.from('family_members').select('score').eq('id', id).single();
+        const newScore = (data.score || 0) + change;
+        await supabase.from('family_members').update({ score: newScore }).eq('id', id);
+        loadMembers();
+    }
 </script>
+
 </body>
 </html>
